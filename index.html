@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Profit Tracker | Oneestore</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0f0f0f;--surface:#1a1a1a;--surface2:#242424;
+  --border:#2e2e2e;--text:#f0f0f0;--muted:#888;
+  --green:#7fff6a;--green-dim:#3d6635;
+  --red:#ff6b6b;--amber:#ffc107;--blue:#60a5fa;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;padding-bottom:40px;}
+.header{padding:16px 16px 0;display:flex;align-items:center;gap:10px;}
+.logo{width:36px;height:36px;background:var(--green);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;}
+.header-text h1{font-size:16px;font-weight:600;}
+.header-text p{font-size:12px;color:var(--muted);}
+.filter-bar{display:flex;gap:6px;padding:14px 16px 0;overflow-x:auto;scrollbar-width:none;}
+.filter-bar::-webkit-scrollbar{display:none;}
+.filter-btn{flex-shrink:0;font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;}
+.filter-btn.active{background:var(--green);color:#0f0f0f;border-color:var(--green);}
+.section{padding:16px 16px 0;}
+.section-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;}
+.summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.summary-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;}
+.summary-card.full{grid-column:1/-1;}
+.summary-card.green{border-color:var(--green-dim);background:#0d1a0d;}
+.summary-card.red{border-color:#5f1e1e;background:#1a0d0d;}
+.summary-label{font-size:11px;color:var(--muted);margin-bottom:6px;}
+.summary-value{font-size:22px;font-weight:700;color:var(--text);}
+.summary-card.green .summary-value{color:var(--green);}
+.summary-card.red .summary-value{color:var(--red);}
+.summary-sub{font-size:11px;color:var(--muted);margin-top:4px;}
+.worker-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;}
+.worker-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.worker-name{font-size:14px;font-weight:600;}
+.worker-gaji{font-size:18px;font-weight:700;color:var(--green);}
+.worker-breakdown{display:flex;flex-wrap:wrap;gap:6px;}
+.breakdown-chip{font-size:11px;padding:3px 8px;border-radius:6px;background:var(--surface2);color:var(--muted);}
+.breakdown-chip b{color:var(--text);}
+.sold-list{margin-top:10px;}
+.sold-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;}
+.sold-item-header{display:flex;justify-content:space-between;margin-bottom:6px;}
+.sold-email{font-size:12px;font-weight:600;color:var(--green);word-break:break-all;}
+.sold-profit{font-size:13px;font-weight:700;color:var(--green);}
+.sold-meta{display:flex;flex-wrap:wrap;gap:5px;}
+.meta-chip{font-size:11px;padding:2px 7px;border-radius:5px;background:var(--surface2);color:var(--muted);}
+.meta-chip b{color:var(--text);}
+.loading-text{text-align:center;padding:40px;color:var(--muted);}
+.empty{text-align:center;padding:30px;color:var(--muted);font-size:13px;}
+.divider{height:1px;background:var(--border);margin:16px 0;}
+.net-profit-big{font-size:28px;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">💰</div>
+  <div class="header-text">
+    <h1>Profit Tracker</h1>
+    <p>oneestore.efootball</p>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <button class="filter-btn active" onclick="setFilter('all')">Semua</button>
+  <button class="filter-btn" onclick="setFilter('month')">Bulan Ini</button>
+  <button class="filter-btn" onclick="setFilter('week')">Minggu Ini</button>
+  <button class="filter-btn" onclick="setFilter('today')">Hari Ini</button>
+</div>
+
+<div id="mainContent"><div class="loading-text">Loading...</div></div>
+
+<script>
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxgiKYv91MVY7OzevnrEJxjEeK--DCefdPvTtXCwN3nUXzySkcWq1hmHNguxhLLPkZc/exec';
+
+const GAJI = {
+  KORER: 2.50,
+  DEKWAN: 1.50,
+  ADMIN: 1.00
+};
+
+let allData = [];
+let currentFilter = 'all';
+
+async function loadData() {
+  try {
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({action: 'getAll'})
+    });
+    const res = await response.json();
+    if (res && res.success) {
+      allData = res.data;
+      render();
+    } else {
+      document.getElementById('mainContent').innerHTML = '<div class="empty">Error loading data.</div>';
+    }
+  } catch(e) {
+    document.getElementById('mainContent').innerHTML = '<div class="empty">Error: ' + e.message + '</div>';
+  }
+}
+
+function setFilter(filter) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  render();
+}
+
+function filterByDate(data) {
+  const now = new Date();
+  return data.filter(d => {
+    if (d.Status !== 'SOLD') return false;
+    if (currentFilter === 'all') return true;
+    const tarikh = new Date(d.Tarikh);
+    if (isNaN(tarikh)) return true;
+    if (currentFilter === 'today') {
+      return tarikh.toDateString() === now.toDateString();
+    }
+    if (currentFilter === 'week') {
+      const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
+      return tarikh >= weekAgo;
+    }
+    if (currentFilter === 'month') {
+      return tarikh.getMonth() === now.getMonth() && tarikh.getFullYear() === now.getFullYear();
+    }
+    return true;
+  });
+}
+
+function render() {
+  const soldData = filterByDate(allData);
+  const totalAcc = soldData.length;
+  const totalRevenue = soldData.reduce((s, d) => s + (Number(d['Harga Jual']) || 0), 0);
+  const totalModal = soldData.reduce((s, d) => s + (Number(d['Harga Beli']) || 0), 0);
+  const totalProfit = totalRevenue - totalModal;
+
+  // Kira gaji
+  let gajiKorer = 0, gajiDekwan = 0, gajiAdminOnee = 0, gajiAdminDekwan = 0;
+  soldData.forEach(d => {
+    gajiKorer += GAJI.KORER;
+    gajiDekwan += GAJI.DEKWAN;
+    const admin = (d['Admin Deal'] || '').toUpperCase();
+    if (admin === 'ONEE') gajiAdminOnee += GAJI.ADMIN;
+    if (admin === 'DEKWAN') gajiAdminDekwan += GAJI.ADMIN;
+  });
+
+  const totalGaji = gajiKorer + gajiDekwan + gajiAdminOnee + gajiAdminDekwan;
+  const netProfit = totalProfit - totalGaji;
+
+  const html = `
+  <div class="section">
+    <div class="section-title">Summary</div>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="summary-label">Acc Sold</div>
+        <div class="summary-value">${totalAcc}</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Total Revenue</div>
+        <div class="summary-value">RM${totalRevenue}</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Total Modal</div>
+        <div class="summary-value">RM${totalModal}</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Total Gaji</div>
+        <div class="summary-value red" style="color:var(--red)">RM${totalGaji.toFixed(2)}</div>
+      </div>
+      <div class="summary-card full ${netProfit >= 0 ? 'green' : 'red'}">
+        <div class="summary-label">Net Profit</div>
+        <div class="summary-value net-profit-big">RM${netProfit.toFixed(2)}</div>
+        <div class="summary-sub">Revenue RM${totalRevenue} - Modal RM${totalModal} - Gaji RM${totalGaji.toFixed(2)}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" style="margin-top:16px;">
+    <div class="section-title">Gaji Worker</div>
+
+    <div class="worker-card">
+      <div class="worker-header">
+        <div class="worker-name">🎮 Korer <span style="font-size:11px;color:var(--muted);font-weight:400;">(iOS Worker)</span></div>
+        <div class="worker-gaji">RM${gajiKorer.toFixed(2)}</div>
+      </div>
+      <div class="worker-breakdown">
+        <div class="breakdown-chip">${totalAcc} acc × RM2.50</div>
+        <div class="breakdown-chip">Edit + Post IG</div>
+      </div>
+    </div>
+
+    <div class="worker-card">
+      <div class="worker-header">
+        <div class="worker-name">📱 Dekwan <span style="font-size:11px;color:var(--muted);font-weight:400;">(Android Worker)</span></div>
+        <div class="worker-gaji">RM${(gajiDekwan + gajiAdminDekwan).toFixed(2)}</div>
+      </div>
+      <div class="worker-breakdown">
+        <div class="breakdown-chip">${totalAcc} acc × RM1.50</div>
+        ${gajiAdminDekwan > 0 ? `<div class="breakdown-chip">${Math.round(gajiAdminDekwan/GAJI.ADMIN)} deal × RM1.00</div>` : ''}
+        <div class="breakdown-chip">Check + Susun Squad</div>
+      </div>
+    </div>
+
+    ${gajiAdminOnee > 0 ? `
+    <div class="worker-card">
+      <div class="worker-header">
+        <div class="worker-name">👑 Onee <span style="font-size:11px;color:var(--muted);font-weight:400;">(Admin)</span></div>
+        <div class="worker-gaji">RM${gajiAdminOnee.toFixed(2)}</div>
+      </div>
+      <div class="worker-breakdown">
+        <div class="breakdown-chip">${Math.round(gajiAdminOnee/GAJI.ADMIN)} deal × RM1.00</div>
+      </div>
+    </div>` : ''}
+  </div>
+
+  <div class="section" style="margin-top:16px;">
+    <div class="section-title">Senarai Sold (${totalAcc} acc)</div>
+    <div class="sold-list">
+      ${soldData.length === 0 ? '<div class="empty">Tiada acc sold</div>' : soldData.map(acc => {
+        const hargaBeli = Number(acc['Harga Beli']) || 0;
+        const hargaJual = Number(acc['Harga Jual']) || 0;
+        const profit = hargaJual - hargaBeli;
+        return `
+        <div class="sold-item">
+          <div class="sold-item-header">
+            <div class="sold-email">${acc.Email || '-'}</div>
+            <div class="sold-profit">+RM${profit}</div>
+          </div>
+          <div class="sold-meta">
+            <div class="meta-chip">Beli: <b>RM${hargaBeli}</b></div>
+            <div class="meta-chip">Jual: <b>RM${hargaJual}</b></div>
+            ${acc.Seller ? `<div class="meta-chip">Seller: <b>${acc.Seller}</b></div>` : ''}
+            ${acc['Admin Deal'] ? `<div class="meta-chip">Deal: <b>${acc['Admin Deal']}</b></div>` : ''}
+            ${acc.Tarikh ? `<div class="meta-chip"><b>${acc.Tarikh}</b></div>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+
+  document.getElementById('mainContent').innerHTML = html;
+}
+
+loadData();
+</script>
+</body>
+</html>
